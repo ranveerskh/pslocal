@@ -1,0 +1,31 @@
+{
+  "name": "pocket-studio-local",
+  "version": "10.3.2",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && node scripts/build-offline.mjs",
+    "preview": "vite preview",
+    "test": "node scripts/check-gallery.mjs && node scripts/check-device.mjs && npm run test:local-models && npm run test:workspace && npm run test:sync-local && npm run test:device-cleanup",
+    "test:device-cleanup": "node --experimental-strip-types scripts/check-device-cleanup.mjs",
+    "test:local-models": "node scripts/check-local.mjs && node scripts/check-qwen-turbo.mjs",
+    "test:workspace": "node scripts/check-workspace-focus.mjs && node scripts/check-media-poster.mjs && node scripts/check-file-export.mjs",
+    "test:sync-local": "node --experimental-strip-types scripts/check-local-sync.mjs && node scripts/check-device-pairing.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "11.1.8",
+    "lucide-react": "1.31.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3",
+    "vite": "8.0.13"
+  }
+}
