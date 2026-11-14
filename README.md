@@ -38,3 +38,9 @@ The app keeps device media, metadata, settings and pairing locally per browser. 
 `npm test`
 
 Use Netlify's deployed functions or Netlify Dev to exercise pairing/sync. `npm run dev` alone can connect to a correctly configured PC but does not supply Netlify Functions.
+
+
+## Optional AI prompt improvement
+Settings → AI prompt assistant accepts an OpenAI API key and checks GPT-6 Luna access. Improve prompt is hidden until setup is confirmed. Each request sends only the current prompt and generation settings/reference names, without images, voice media, connection URLs, or conversation history. Review the result before using it; generation remains manual.
+
+The Netlify prompt-assistant function stores credentials encrypted with AES-GCM; the browser holds a random access token, excluded from project sync/ZIP exports. Removing the key deletes its server record. Configure each browser separately. Monthly USD usage estimates are saved only on this browser and are not the OpenAI invoice. The current rates are $0.10 input, $0.01 cached input and $0.50 output per million tokens. Netlify Functions and Blobs must be enabled.
