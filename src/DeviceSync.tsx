@@ -9,8 +9,10 @@ import type {useGalleryStore} from './vault';
 type Pairing = {code: string; seen: SeenRecords;base?:string};
 type Invite={pin:string;expiresAt:number};
 type Pending={request:string;device:string;approved:boolean};
+// Temporary pause: retain pairing and sync implementation for reactivation.
+const DEVICE_SYNC_ENABLED = false;
 const PAIR_API='/.netlify/functions/device-pairing';
-async function pairRequest(action:string,params:Record<string,unknown>,secret?:string){const headers:Record<string,string>={'Content-Type':'application/json'};if(secret)headers.Authorization='Bearer '+(await pairKeys(secret)).token;const response=await fetch(PAIR_API,{method:'POST',headers,body:JSON.stringify({action,...params}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Pairing failed.');return data;}
+async function pairRequest(action:string,params:Record<string,unknown>,secret?:string){if(!DEVICE_SYNC_ENABLED)throw new Error('Device sync is temporarily off.');const headers:Record<string,string>={'Content-Type':'application/json'};if(secret)headers.Authorization='Bearer '+(await pairKeys(secret)).token;const response=await fetch(PAIR_API,{method:'POST',headers,body:JSON.stringify({action,...params}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Pairing failed.');return data;}
 const STORAGE_KEY = 'pocket-device-pairing-v1';
 const API = '/.netlify/functions/device-sync';
 const EMPTY: SyncSnapshot = {version: 1, records: [], hidden: []};
@@ -48,7 +50,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   current.current = pairing;
 
   const sync = useCallback(async (request: Pairing, mode: 'create' | 'join' | 'refresh') => {
-    if (deviceResetting || inFlight.current || !live.current.loaded || live.current.legacyLocked) return false;
+    if (!DEVICE_SYNC_ENABLED || deviceResetting || inFlight.current || !live.current.loaded || live.current.legacyLocked) return false;
     inFlight.current = true;
     setBusy(true);
     setError('');
@@ -136,7 +138,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   }, []);
 
   useEffect(() => {
-    if (!pairing?.code || !vault.loaded || vault.legacyLocked) return;
+    if (!DEVICE_SYNC_ENABLED || !pairing?.code || !vault.loaded || vault.legacyLocked) return;
     const refresh = () => {
       if (!document.hidden && current.current) void sync(current.current, 'refresh');
     };
@@ -151,7 +153,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   }, [pairing?.code, sync, vault.loaded, vault.legacyLocked]);
 
   useEffect(()=>{
-    if(!isLocal||!pairing?.code||!vault.loaded)return;
+    if(!DEVICE_SYNC_ENABLED||!isLocal||!pairing?.code||!vault.loaded)return;
     const timer=setTimeout(()=>{if(!document.hidden&&current.current)void sync(current.current,'refresh');},1500);
     return()=>clearTimeout(timer);
   },[pairing?.code,vault.jobs,vault.folders,vault.characters,vault.loaded,vault.locked,vault.protectedGallery,sync]);
@@ -159,12 +161,12 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
   async function create(base?:string){if(!isLocal){await sync({code:newPairCode(),seen:{}},'create');return;}try{const request={code:newPairCode(),seen:{},base:sharedPCBase(base)};if(await sync(request,'create'))await makeInvite(request);}catch(e){setError((e as Error).message);}}
   async function join(code:string){if(!isLocal){await sync({code:code.trim(),seen:{}},'join');return;}setBusy(true);setError('');try{const pin=code.trim();if(!/^\d{4}$/.test(pin))throw new Error('Enter the 4-digit code.');const device=/iPhone|iPad/i.test(navigator.userAgent)?'iPhone / iPad':/Windows/i.test(navigator.userAgent)?'Windows PC':'Another device';const data=await pairRequest('join',{pin,device});setJoining({pin,...data});setStatus('Approve this connection on the first device.');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   useEffect(()=>{
-    if(!isLocal||!invite||!pairing)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
+    if(!DEVICE_SYNC_ENABLED||!isLocal||!invite||!pairing)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
     async function poll(){if(invite!.expiresAt<=Date.now()){setInvite(undefined);setPending(null);return;}try{const data=await pairRequest('peek',{pin:invite!.pin},pairing!.code);if(!gone)setPending(data.pending);}catch{if(!gone){setInvite(undefined);setPending(null);}return;}if(!gone)timer=setTimeout(poll,3000);}
     void poll();return()=>{gone=true;clearTimeout(timer);};
   },[invite?.pin,pairing?.code]);
   useEffect(()=>{
-    if(!isLocal||!joining)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
+    if(!DEVICE_SYNC_ENABLED||!isLocal||!joining)return;let gone=false;let timer:ReturnType<typeof setTimeout>;
     async function poll(){if(joining!.expiresAt<=Date.now()){setJoining(undefined);setError('Code expired. Create another code.');return;}try{const data=await pairRequest('status',{pin:joining!.pin,ticket:joining!.ticket});if(!gone&&!data.waiting){setJoining(undefined);await sync({code:data.secret,base:sharedPCBase(data.base),seen:{}},'join');return;}}catch(e){if(!gone){setJoining(undefined);setError((e as Error).message);}return;}if(!gone)timer=setTimeout(poll,2000);}
     void poll();return()=>{gone=true;clearTimeout(timer);};
   },[joining?.ticket,sync]);
@@ -188,7 +190,7 @@ export function useDeviceSync(vault: ReturnType<typeof useGalleryStore>,localOpt
     shareBase:pairing?.base||localOptions?.base||'',
     newInvite:()=>pairing&&makeInvite(pairing),
     cancelJoin:()=>{setJoining(undefined);setStatus('Pairing cancelled.');},
-    disabled: !vault.loaded || vault.legacyLocked,
+    disabled: !DEVICE_SYNC_ENABLED || !vault.loaded || vault.legacyLocked,
     create,join,
     refresh: () => pairing && sync(pairing, 'refresh'),
     disconnect,
@@ -214,6 +216,11 @@ export default function DeviceSync({service}: {service: ReturnType<typeof useDev
     }
   }
 
+  if(!DEVICE_SYNC_ENABLED)return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
+    <h2><Link2 size={19}/> Phone &amp; PC Sync</h2>
+    <button className="button secondary" disabled>Sync off</button>
+    <p>Device sync is temporarily deactivated. Automatic checks and pairing are paused. Existing projects and saved pairing details stay on this device.</p>
+  </section>;
   if(isLocal)return <section className="panel settings-connection device-sync-settings" aria-label="Device Sync">
     <h2><Link2 size={19}/> Phone &amp; PC Sync</h2>
     <p>Pair once with a 4-digit code. Projects, prompts, references and generation status sync between devices. Videos stay on your PC and open through Tailscale.</p>
