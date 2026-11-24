@@ -14,6 +14,18 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "same-origin"
+# Sync handlers are retained in server/paused-sync, outside function discovery.
+# Serve a static error to old tabs without invoking any serverless function.
+[[redirects]]
+  from = "/.netlify/functions/device-sync"
+  to = "/device-sync-off.json"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/.netlify/functions/device-pairing"
+  to = "/device-sync-off.json"
+  status = 404
+  force = true
 [[redirects]]
   from = "/local"
   to = "/"
